@@ -14,6 +14,20 @@
 bits 16
 org 0x0100
 
+; ---- Mapa de memoria -------------------------------------------------------
+; El estado y la cinta viven por encima de 0x0500: la IVT (0x0000-0x03FF) y el
+; BIOS Data Area (0x0400-0x04FF) quedan intactos. En particular 0x046C, el
+; contador de ticks que INT 1Ah lee para medir las duraciones, ya no es
+; alcanzable por el puntero de cinta.
+%define PROG    0x0600          ; programa (sector 4), 511B + NUL
+%define STATE   0x0500          ; bloque de estado del motor
+%define IP_     STATE+0         ; puntero de instruccion dentro del programa
+%define REG     STATE+2         ; registro: frecuencia en Hz / acumulador
+%define TEMPO   STATE+4         ; tempo actual en BPM
+%define DUR     STATE+6         ; duracion actual (indice 0-9, semicorcheas)
+%define TAPEP   STATE+8         ; puntero de celda de la cinta
+%define TAPE    0x0800          ; cinta (2KB, hasta 0x0FFF)
+
 jmp short start
 nop
 db "BEAT    ", 0x00, 0x02, 0x01, 0x01, 0x00, 0xE0, 0x00, 0x0B, 0x00, 0x12, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x29, 0xEF, 0xBE, 0x37, 0x13, "BEATLANG   ", "FAT12   "
@@ -50,24 +64,30 @@ dw 0xAA55
 ; ----------------------------------------------------------------------------
 
 engine:
-    mov di, 0x0400
+    mov di, STATE
     xor ax, ax
-    mov cx, 32
+    mov cx, 8
     rep stosw
-    mov di, 0x0400
-    mov word [di], 0x0600
-    mov word [di+4], 120
-    mov word [di+6], 9
+
+    mov di, TAPE
+    xor ax, ax
+    mov cx, 1024
+    rep stosw
+
+    mov word [IP_], PROG
+    mov word [TEMPO], 120
+    mov word [DUR], 4
+    mov word [TAPEP], TAPE
 
     mov ax, 0x0201
-    mov bx, 0x0600
+    mov bx, PROG
     mov cx, 0x0004
     xor dx, dx
     int 0x13
     jc load_fail
 
 main_loop:
-    mov si, [0x0400]
+    mov si, [IP_]
     lodsb
     test al, al
     jz halt
@@ -106,26 +126,28 @@ main_loop:
     je op_G
     cmp al, 'N'
     je op_H
+    cmp al, 'H'
+    je halt
     jmp next_ip
 
 op_1:
-    inc word [0x0406]
+    inc word [TAPEP]
     jmp next_ip
 
 op_2:
-    dec word [0x0406]
+    dec word [TAPEP]
     jmp next_ip
 
 op_3:
-    inc word [0x0402]
+    inc word [REG]
     jmp next_ip
 
 op_4:
-    dec word [0x0402]
+    dec word [REG]
     jmp next_ip
 
 op_5:
-    mov bx, [0x0402]
+    mov bx, [REG]
     call play
     jmp next_ip
 
@@ -141,11 +163,11 @@ op_6:
     movzx bx, al
     shl bx, 1
     mov bx, [note_table+bx]
-    mov [0x0402], bx
+    mov [REG], bx
     jmp next_ip
 
 op_7:
-    cmp word [0x0402], 0
+    cmp word [REG], 0
     jne next_ip
     mov di, si
     mov cx, 1
@@ -164,20 +186,20 @@ nf1:
 cf1:
     dec cx
     jnz op7_scan
-    mov [0x0400], si
+    mov [IP_], si
     jmp main_loop
 
 op_8:
-    cmp word [0x0402], 0
+    cmp word [REG], 0
     je next_ip
     mov di, si
     dec di
     dec di
     mov cx, 1
 op8_scan:
-    cmp di, 0x0600
+    cmp di, PROG
     jl halt
-    mov al, cs:[di]
+    mov al, [di]
     cmp al, ']'
     je nb2
     cmp al, '['
@@ -191,10 +213,11 @@ nb2:
 cb2:
     dec cx
     jnz op8_scan
-    mov [0x0400], di
-    inc word [0x0400]
+    mov [IP_], di
+    inc word [IP_]
     jmp main_loop
 
+; T<n> -- tempo: indice 0-9 en la tabla de BPM
 op_9:
     lodsb
     sub al, '0'
@@ -204,53 +227,55 @@ op_9:
     movzx bx, al
     shl bx, 1
     mov ax, [tempo_table+bx]
-    mov [0x040A], ax
+    mov [TEMPO], ax
     jmp next_ip
 t9_skip:
     jmp next_ip
 
+; D<n> -- duracion: indice 0-9, en semicorcheas
 op_A:
     lodsb
     sub al, '0'
     jl d9_skip
     cmp al, 9
     jg d9_skip
-    mov [0x040C], al
+    movzx ax, al
+    mov [DUR], ax
     jmp next_ip
 d9_skip:
     jmp next_ip
 
 op_B:
-    mov cx, [0x040C]
+    call dur_ticks
     call wait_t
     jmp next_ip
 
 op_C:
-    mov bx, [0x0406]
+    mov bx, [TAPEP]
     mov al, [bx]
     movzx ax, al
-    mov [0x0402], ax
+    mov [REG], ax
     jmp next_ip
 
 op_D:
-    mov bx, [0x0406]
-    mov al, [0x0402]
+    mov bx, [TAPEP]
+    mov al, [REG]
     mov [bx], al
     jmp next_ip
 
 op_E:
     lodsw
-    mov [0x0400], ax
+    mov [IP_], ax
     jmp main_loop
 
 op_F:
-    cmp word [0x0402], 0
+    cmp word [REG], 0
     je dj
     add si, 2
     jmp next_ip
 dj:
     lodsw
-    mov [0x0400], ax
+    mov [IP_], ax
     jmp main_loop
 
 op_G:
@@ -259,13 +284,31 @@ op_G:
     out 61h, al
     jmp next_ip
 
+; N<decimal> -- carga una frecuencia en Hz escrita en ASCII decimal: N440 -> 440
 op_H:
-    lodsw
-    mov [0x0402], ax
+    xor bx, bx
+nh_digit:
+    lodsb
+    sub al, '0'
+    jb nh_done
+    cmp al, 9
+    ja nh_done
+    mov ah, 0
+    push ax
+    mov ax, bx
+    shl bx, 1
+    shl ax, 3
+    add bx, ax                  ; bx *= 10
+    pop ax
+    add bx, ax                  ; += digito
+    jmp nh_digit
+nh_done:
+    dec si                      ; devuelve el byte no-digito al flujo
+    mov [REG], bx
     jmp next_ip
 
 next_ip:
-    mov [0x0400], si
+    mov [IP_], si
     jmp main_loop
 
 halt:
@@ -277,6 +320,29 @@ load_fail:
     mov si, msg_err
     call puts
     jmp halt
+
+; ----------------------------------------------------------------------------
+; Duracion en ticks del PIT (18.2065 Hz) a partir de tempo y duracion:
+;   ticks_por_negra = 1092 / BPM        (1092 = 18.2065 ticks/s * 60 s/min)
+;   ticks           = ticks_por_negra * D / 4    (D en semicorcheas)
+; Devuelve CX, con un minimo de 1 tick.
+; ----------------------------------------------------------------------------
+dur_ticks:
+    push ax
+    push dx
+    mov ax, 1092
+    xor dx, dx
+    div word [TEMPO]
+    mul word [DUR]
+    shr ax, 2
+    or ax, ax
+    jnz dt_ok
+    inc ax
+dt_ok:
+    mov cx, ax
+    pop dx
+    pop ax
+    ret
 
 play:
     test bx, bx
@@ -291,14 +357,14 @@ play:
     mov al, ah
     out 42h, al
     call son
-    mov cx, [0x040C]
+    call dur_ticks
     call wait_t
     call sof
     pop ax
     ret
 
 rest:
-    mov cx, [0x040C]
+    call dur_ticks
     call wait_t
     ret
 
@@ -314,19 +380,26 @@ sof:
     out 61h, al
     ret
 
+; ----------------------------------------------------------------------------
+; Espera CX ticks del BIOS. La cuenta va en BX porque INT 1Ah/AH=00h devuelve
+; en AL el flag de medianoche, y ahi es donde el codigo anterior guardaba la
+; duracion: se perdia en cada llamada y toda nota duraba cero.
+; ----------------------------------------------------------------------------
 wait_t:
     push ax
+    push bx
     push dx
-    mov ax, cx
-    mov ah, 0
+    mov bx, cx
+    xor ah, ah
     int 1Ah
-    add dx, ax
-    mov ax, dx
-.w:
+    add bx, dx                  ; bx = tick objetivo
+wt_w:
+    xor ah, ah
     int 1Ah
-    cmp dx, ax
-    jb .w
+    cmp dx, bx
+    jb wt_w
     pop dx
+    pop bx
     pop ax
     ret
 
@@ -353,6 +426,7 @@ tempo_table:
     dw 60, 80, 100, 120, 140, 160, 180, 200, 220, 240
 msg_err db "LOAD ERR", 0
 
+ENGINE_END:
 times 1536-($-$$) db 0
 
 ; ----------------------------------------------------------------------------
