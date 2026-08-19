@@ -77,6 +77,17 @@ un bucle de Brainfuck y después lo usa como dato musical.
 produce este fuente está en `BEAT.img.sha256`; `./build.sh` debe reproducirlo
 exactamente.
 
+## Versiones anteriores
+
+`legacy/` conserva cuatro imágenes arrancables del 14 de agosto de 2026 y tres
+variantes del fuente que no compilan. Tres de esas imágenes meten el intérprete
+y el programa en **un solo sector de 512 bytes**, frente a los tres sectores de
+la versión actual.
+
+Ninguna se reconstruye desde el fuente de este repositorio: se comprobó
+ensamblando todos los `.asm` disponibles y comparando hashes. Ver
+[legacy/README.md](legacy/README.md).
+
 ## Licencia
 
 MIT — ver [LICENSE](LICENSE).
