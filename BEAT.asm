@@ -358,8 +358,13 @@ dt_ok:
     ret
 
 play:
-    test bx, bx
-    jz rest
+    ; Por debajo de 19 Hz no hay nota posible: el divisor del 8253 tope es
+    ; 65536, que da 18.2 Hz. Y no es solo que no suene -- `div bx` mete el
+    ; cociente en AX, asi que 1193182/18 = 66288 desborda los 16 bits y
+    ; dispara la excepcion 0, dejando el altavoz encendido para siempre.
+    ; Cualquier `R` sobre una celda que valga 1 llegaria aqui.
+    cmp bx, 19
+    jb rest
     push ax
     mov al, 0B6h
     out 43h, al
