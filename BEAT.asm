@@ -28,6 +28,17 @@ org 0x0100
 %define TAPEP   STATE+8         ; puntero de celda de la cinta
 %define TAPE    0x0800          ; cinta (2KB, hasta 0x0FFF)
 
+; El bootsector y el motor comparten un unico `org 0x0100`, pero el motor se
+; carga en 0x0100 SIN los 512 bytes del bootsector delante. Sus etiquetas valen
+; 512 de mas. Los saltos no se enteran porque son IP-relativos; las referencias
+; ABSOLUTAS a datos, si: hay que restarles el hueco.
+;
+; Sin esto, `mov ax,[tempo_table+bx]` lee de 0x0492 -- dentro del BIOS Data
+; Area -- en vez de 0x0292. Devuelve cero, y `div word [TEMPO]` es entonces una
+; division por cero que deja el altavoz encendido para siempre.
+%define BOOT_GAP 0x0200
+%define AT(sym)  ((sym) - BOOT_GAP)
+
 jmp short start
 nop
 db "BEAT    ", 0x00, 0x02, 0x01, 0x01, 0x00, 0xE0, 0x00, 0x0B, 0x00, 0x12, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x29, 0xEF, 0xBE, 0x37, 0x13, "BEATLANG   ", "FAT12   "
@@ -59,8 +70,10 @@ dw 0xAA55
 
 ; ----------------------------------------------------------------------------
 ; Motor (cargado en 0x0100, CS:IP = 0x0000:0x0100, DS=ES=SS=0)
-; Todos los saltos del motor son IP-relativos y el bootsector no referencia
-; absolutas, asi que un unico org 0x0100 cubre ambos espacios de direcciones.
+; Los saltos del motor son todos IP-relativos y sobreviven a compartir el
+; `org 0x0100` con el bootsector. Las referencias absolutas a datos NO: van
+; envueltas en AT(), que descuenta los 512 bytes del bootsector. Cualquier
+; etiqueta nueva que se lea como dato tiene que usar AT() tambien.
 ; ----------------------------------------------------------------------------
 
 engine:
@@ -162,7 +175,7 @@ op_6:
     jg op_6
     movzx bx, al
     shl bx, 1
-    mov bx, [note_table+bx]
+    mov bx, [AT(note_table)+bx]
     mov [REG], bx
     jmp next_ip
 
@@ -226,7 +239,7 @@ op_9:
     jg t9_skip
     movzx bx, al
     shl bx, 1
-    mov ax, [tempo_table+bx]
+    mov ax, [AT(tempo_table)+bx]
     mov [TEMPO], ax
     jmp next_ip
 t9_skip:
@@ -317,7 +330,7 @@ halt:
     hlt
 
 load_fail:
-    mov si, msg_err
+    mov si, AT(msg_err)
     call puts
     jmp halt
 
