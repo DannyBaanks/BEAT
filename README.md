@@ -130,6 +130,23 @@ imagen construida, no desde el fuente.
 produce este fuente está en `BEAT.img.sha256`; `./build.sh` debe reproducirlo
 exactamente.
 
+## Verificación
+
+Que el motor ensamble no dice nada sobre si suena. `tools/` trae lo necesario
+para comprobarlo de verdad:
+
+```sh
+python tools/test_qemu.py     # arranca la imagen y mide el altavoz
+```
+
+Arranca `BEAT.img` en QEMU, graba lo que sale por el altavoz interno y verifica
+que las siete notas de la escala están, en orden, con su altura y su duración.
+
+Vale la pena insistir en por qué existe: de los cinco bugs que tuvo este motor,
+cuatro eran invisibles leyendo el fuente y sólo aparecieron al arrancar el
+disco. Nada de `tools/` participa en la construcción de la imagen — ver
+[tools/README.md](tools/README.md).
+
 ## Versiones anteriores
 
 `legacy/` conserva cuatro imágenes arrancables del 14 de agosto de 2026 y tres

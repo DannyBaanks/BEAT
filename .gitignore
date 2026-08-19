@@ -2,3 +2,10 @@
 *.lst
 .DS_Store
 Thumbs.db
+
+# Grabaciones y binarios que dejan las herramientas de tools/ al verificar.
+# El WAV se conserva a proposito tras cada corrida: sirve para escuchar lo que
+# el disco emitio de verdad cuando el test falla.
+*.wav
+__pycache__/
+*.pyc
