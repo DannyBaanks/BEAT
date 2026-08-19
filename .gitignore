@@ -1,0 +1,4 @@
+*.o
+*.lst
+.DS_Store
+Thumbs.db
