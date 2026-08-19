@@ -66,7 +66,7 @@ Nueve son propias de BEAT:
 | `W` | escribe el registro en la celda bajo el puntero |
 | `J` | salto incondicional (dirección absoluta de 16 bits) |
 | `Z` | salta si el registro es cero |
-| `S` | silencia el altavoz |
+| `S` | alterna el altavoz — sostiene la última nota indefinidamente |
 | `H` | detiene la máquina |
 
 El registro y la cinta son dos almacenes distintos: `R` y `W` los conectan. Eso
@@ -78,9 +78,27 @@ frecuencia se escribe tal cual: `N440.` toca un La4. La duración real de una
 nota sale de las dos instrucciones a la vez —
 `ticks = (1092 / BPM) × D / 4`, sobre el tick de 18.2065 Hz del BIOS.
 
+`S` no es un mute: hace `xor` sobre los dos bits del puerto `61h`, o sea que
+**alterna**. Como el divisor del 8253 sigue cargado con la última nota,
+encenderlo deja ese tono sonando mientras el programa continúa ejecutando —
+es la única forma de sostener una nota más allá del máximo que permite `D`.
+`H` sí apaga el altavoz antes de parar la máquina.
+
+`J` y `Z` saltan a direcciones **absolutas**. El motor empieza a ejecutar en
+`0x0600`, así que un programa con saltos solo funciona si es el primero del
+sector: no es reubicable.
+
+Dos advertencias sobre la mitad Brainfuck. `+` `-` y `[` `]` operan sobre el
+**registro**, no sobre la celda: los idiomas habituales de Brainfuck que usan
+varias celdas como acumuladores (`>+++++[<+++++>-]<`) aquí no cierran nunca,
+porque el saldo por vuelta es positivo y el registro no llega a cero. Y `W`
+escribe solo el byte bajo, así que la cinta guarda valores de 0 a 255: como
+altura, eso son frecuencias graves.
+
 ## Programas de ejemplo
 
-El fuente trae nueve programas en el sector 4. El primero es una escala:
+El fuente trae nueve programas en el sector 4; el motor ejecuta el primero y
+los demás son catálogo. El primero es una escala:
 
 ```
 T4D9N440.N494.N523.N587.N659.N698.N784.H
@@ -91,9 +109,20 @@ suena de verdad es 440.1, 494.1, 523.1, 587.2, 659.2, 698.2 y 784.5 Hz: el 8253
 solo acepta divisores enteros de 1193182, así que la afinación es la que el
 hardware puede dar, no la que se le pide.
 
-Otros mezclan las dos mitades del lenguaje:
-`T3D4>+++++[<+++++>-]<N440.W+W+W.W.W.H` calcula 25 con un bucle de Brainfuck y
-después lo usa como dato musical.
+| | qué demuestra |
+|---|---|
+| 1 | escala mayor de La4 a Sol5 |
+| 2 | arpegio de Do con `P` separando las notas |
+| 3 | `T9D0N440[.----]H` — glissando de 110 notas; el registro *es* el contador del bucle |
+| 4 | tres alturas guardadas con `W` y releídas con `R` |
+| 5 | motivo repetido cuatro veces, con el contador viviendo en la cinta (`Z` + `J`) |
+| 6 | ocho pulsos de 80 a 220 Hz, altura acumulada en una celda entre vueltas |
+| 7 | dos voces en una quinta multiplexadas a 55 ms: el altavoz es monofónico, el oído no |
+| 8 | drone sostenido con `S` por encima del límite de `D` |
+| 9 | la misma celda leída como altura y como cuenta atrás |
+
+Los nueve terminan y los nueve suenan; están verificados ejecutándolos desde la
+imagen construida, no desde el fuente.
 
 ## Reproducibilidad
 

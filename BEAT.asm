@@ -431,15 +431,35 @@ times 1536-($-$$) db 0
 
 ; ----------------------------------------------------------------------------
 ; Programas (sector 4, cargado a 0x0600)
+;
+; El motor ejecuta desde 0x0600, o sea el primero de la lista; los demas son
+; catalogo. Para oir otro, ponlo el primero o escribelo directamente en el
+; sector 4 de la imagen.
+;
+; Los que llevan J o Z usan direcciones ABSOLUTAS, calculadas desde 0x0600:
+; solo valen si el programa empieza ahi. Un programa con saltos no es
+; reubicable dentro del sector.
+;
+; Los nueve se simulan antes de entrar aqui: todos terminan y todos suenan.
 ; ----------------------------------------------------------------------------
+; 1. escala mayor de La4 a Sol5 (40 B)
 prog1: db 'T4D9N440.N494.N523.N587.N659.N698.N784.H', 0
-prog2: db 'T3D6>+++++[<+++++>-]<++.>.+.+.+.+.+.', 0
-prog3: db 'T2D4>+++++[<+++++>-]<[Z>+.<-]H', 0
-prog4: db 'T3D4>+++++[<+++++>-]<W<W<W<W<R.R.R.R.H', 0
-prog5: db 'T3D4>+W>+W<Z>[<R.+>W>R.<-]H', 0
-prog6: db 'T3D4I.R.I.R.I.R.H', 0
-prog7: db 'T3D4N440.P.N523.P.N587.P.N659.H', 0
-prog8: db 'T2D3>++W>++++W<<[Z>R.<-]>[Z>R.<-]H', 0
-prog9: db 'T3D4>+++++[<+++++>-]<N440.W+W+W.W.W.H', 0
+; 2. arpegio de Do con pausas (46 B)
+prog2: db 'T3D4N262.PN330.PN392.PN523.PN392.PN330.PN262.H', 0
+; 3. glissando descendente de 440 Hz a cero -- el registro es el contador (16 B)
+prog3: db 'T9D0N440[.----]H', 0
+; 4. tres alturas guardadas en la cinta y releidas (36 B)
+prog4: db 'T3D5N200W>N150W>N120W<<R.>R.>R.<<R.H', 0
+; 5. motivo repetido cuatro veces, contador en la cinta (33 B)
+prog5: db 'T5D3N4WRZ ', 6, 'N330.N392.N523.R-WJ', 7, 6, 'H', 0
+; 6. ocho pulsos de altura creciente acumulada en la cinta (49 B)
+prog6: db 'T7D2N8W>N60W<RZ0', 6, '>R++++++++++++++++++++W.<R-WJ', 13, 6, 'H', 0
+; 7. dos voces multiplexadas en una quinta -- el altavoz es monofonico,
+;    el oido no (85 B)
+prog7: db 'T9D0N262.N392.N262.N392.N262.N392.N262.N392.N262.N392.N262.N392.N262.N392.N262.N392.H', 0
+; 8. drone sostenido con S por encima del limite de D (25 B)
+prog8: db 'T5D4N165.SPPPPPPPPSN330.H', 0
+; 9. la misma celda leida como nota y como cuenta (31 B)
+prog9: db 'T4D4N120WRZ', 30, 6, 'R.R----------WJ', 9, 6, 'H', 0
 
 times 1474560-($-$$) db 0
