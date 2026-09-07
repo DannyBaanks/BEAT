@@ -1,0 +1,186 @@
+'''BEAT''' is a music-oriented [[esoteric programming language]] whose complete
+interpreter runs from a 1.44 MB floppy disk image in 16-bit real mode. It does
+not run on top of an operating system: the boot sector loads the BEAT engine,
+and the engine drives the machine's internal speaker through the 8253 timer and
+port <code>61h</code>.
+
+== Program format ==
+
+A BEAT program is a byte string stored in sector 4 of the disk image. The
+program is limited to 511 bytes followed by a NUL terminator. The engine starts
+at <code>0x0600</code>; the program is independent from the engine sectors, so
+the music can be changed without rebuilding the interpreter.
+
+The reference source contains nine catalogue programs. The first program is a
+scale:
+
+<syntaxhighlight lang="text">
+T4D9N440.N494.N523.N587.N659.N698.N784.H
+</syntaxhighlight>
+
+== Disk layout ==
+
+{| class="wikitable"
+! Sector !! Address !! Content
+|-
+| 1 || <code>0x000</code> || FAT12-compatible boot sector and loader
+|-
+| 2-3 || <code>0x200</code> || BEAT engine, loaded at <code>0x0100</code>
+|-
+| 4 || <code>0x400</code> || User program, up to 511 bytes plus NUL
+|}
+
+At runtime the engine uses the following memory areas:
+
+{| class="wikitable"
+! Address !! Purpose
+|-
+| <code>0x0000-0x04FF</code> || IVT and BIOS Data Area; untouched by the engine
+|-
+| <code>0x0100</code> || Loaded BEAT engine
+|-
+| <code>0x0500</code> || Instruction pointer, register, tempo, duration and tape pointer
+|-
+| <code>0x0600</code> || Program loaded from sector 4
+|-
+| <code>0x0800</code> || 2 KB runtime tape
+|}
+
+== Execution model ==
+
+The machine has one 16-bit register and a 2 KB tape. Arithmetic instructions
+operate on the register. <code>R</code> and <code>W</code> connect the register to
+the tape, allowing a value to be stored and later reused as a note frequency or
+loop state.
+
+The speaker is driven by the 8253 programmable interval timer. Requested
+frequencies are converted to integer timer divisors, so the physical output is
+the frequency the hardware can express rather than necessarily the requested
+frequency. Durations use BIOS ticks at approximately 18.2065 Hz.
+
+== Instructions ==
+
+{| class="wikitable"
+! Instruction !! Effect
+|-
+| <code>&gt;</code>, <code>&lt;</code> || Move the tape pointer
+|-
+| <code>+</code>, <code>-</code> || Increment or decrement the register
+|-
+| <code>.</code> || Play the register as a frequency
+|-
+| <code>,</code> || Keyboard input; the reference no-console path reads zero
+|-
+| <code>[</code>, <code>]</code> || Loop while the register is non-zero
+|-
+| <code>T&lt;n&gt;</code> || Select tempo table entry 0-9
+|-
+| <code>D&lt;n&gt;</code> || Set note duration 0-9
+|-
+| <code>N&lt;hz&gt;</code> || Load a decimal frequency, for example <code>N440</code>
+|-
+| <code>P</code> || Pause for the current duration
+|-
+| <code>R</code> || Read the tape cell into the register
+|-
+| <code>W</code> || Write the low byte of the register to the tape
+|-
+| <code>J</code> || Unconditional absolute jump
+|-
+| <code>Z</code> || Jump if the register is zero
+|-
+| <code>S</code> || Toggle the speaker state and sustain the last timer tone
+|-
+| <code>H</code> || Stop the machine
+|}
+
+The Brainfuck-like loop instructions are register loops, not ordinary
+multi-cell Brainfuck loops. The tape stores only the low byte of a register
+value, from 0 through 255.
+
+<code>J</code> and <code>Z</code> use absolute addresses based on the program's
+fixed load address. Programs using them are therefore not generally relocatable
+inside the sector.
+
+== I/O and output ==
+
+BEAT has no conventional text stdout. Its observable output is the sound
+produced by the internal speaker. A run can be observed through:
+
+* the physical or emulated speaker;
+* the reference simulator's list of frequency-duration events;
+* a rendered WAV file;
+* QEMU audio capture and note analysis.
+
+== Building and running ==
+
+The image is built from <code>BEAT.asm</code> with NASM:
+
+<syntaxhighlight lang="sh">
+./build.sh
+qemu-system-i386 -fda BEAT.img
+</syntaxhighlight>
+
+The reference simulator can run a program without booting QEMU:
+
+<syntaxhighlight lang="sh">
+python tools/beat_sim.py 'T4D9N440.N494.N523.H' scale.wav
+</syntaxhighlight>
+
+The simulator is a semantic reference, not the final hardware test. The
+hardware-facing verification is:
+
+<syntaxhighlight lang="sh">
+python tools/test_qemu.py
+</syntaxhighlight>
+
+== Changing a program without rebuilding ==
+
+The program occupies its own sector. A replacement program can be patched into
+an existing image:
+
+<syntaxhighlight lang="sh">
+python tools/patch_sector4.py BEAT.img program.beat output.img
+qemu-system-i386 -fda output.img
+</syntaxhighlight>
+
+The patcher preserves the boot signature and rejects programs larger than the
+sector budget.
+
+== FLOW integration ==
+
+<code>tools/flow2beat.py</code> is an adapter from a FLOW execution trace to a
+BEAT program. It maps particle positions to pitches, particle density to
+tempo, state changes to tape operations, and particle deaths to pauses. This is
+an output adapter, not a claim that BEAT and FLOW share the same execution
+semantics.
+
+<syntaxhighlight lang="sh">
+python tools/flow2beat.py execution.trace.json -o flow.beat
+python tools/patch_sector4.py BEAT.img flow.beat BEAT_FLOW.img
+qemu-system-i386 -fda BEAT_FLOW.img
+</syntaxhighlight>
+
+The generated program is still subject to the 511-byte sector limit. Events
+that do not fit are not encoded in the output program.
+
+== Computational status ==
+
+No computational-class claim is made here. BEAT has arithmetic, loops, mutable
+tape storage and absolute jumps, but its execution is constrained by the disk
+program size and the machine's runtime model.
+
+== Implementation ==
+
+The reference implementation is in [https://github.com/DannyBaanks/BEAT BEAT]
+and is released under the MIT license. The simulator and analysis tools live in
+<code>tools/</code>; they verify behavior but are not part of the disk image
+build chain.
+
+[[Category:Languages]]
+[[Category:Esoteric programming languages]]
+[[Category:Music languages]]
+[[Category:Boot sector computers]]
+[[Category:16-bit]]
+[[Category:2026]]
+[[Category:Implemented]]
